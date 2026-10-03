@@ -579,7 +579,7 @@
       <label>Control Type</label>
       <select id="controlType">
         <option value="" selected>—</option>
-        <option value="Somfy RTS Wired">Somfy RTS Wired</option>
+        <option value="Somfy Rollixo RTS Wired">Somfy Rollixo RTS Wired</option>
         <option value="Somfy Rollixo Premium IO Wired">Somfy Rollixo Premium IO Wired</option>
         <option value="Somfy Rollixo Premium IO Wireless">Somfy Rollixo Premium IO Wireless</option>
         <option value="ANSA">ANSA</option>
@@ -730,7 +730,7 @@ const COLOURS = [
   "DUCK EGG BLUE","FIR GREEN (RAL 6009)","PALE GREEN (RAL 6021) (CHARTWELL)","GOLDEN OAK (WOODGRAIN)",
   "ROSEWOOD (WOODGRAIN)","WALNUT (WOODGRAIN)"
 ];
-const CONTROL_TYPES = ["Somfy RTS Wired","Somfy Rollixo Premium IO Wired","Somfy Rollixo Premium IO Wireless","ANSA","ANSA Low Headroom","Eurodrive kit"];
+const CONTROL_TYPES = ["Somfy Rollixo RTS Wired","Somfy Rollixo Premium IO Wired","Somfy Rollixo Premium IO Wireless","ANSA","ANSA Low Headroom","Eurodrive kit"];
 
 const PROFILES = {
   "55":    {label:"55mm (Octagonal Barrel)", barrelOffset:85,  lathDivisor:55, liftDivisor:450, barrelRings:"x2"},
@@ -749,10 +749,10 @@ const PROFILES = {
 const BOX_LEG_MATRIX = {
   55: [
     {box:"205MM", legs:["65MM"],                maxGuideHeight:1900, lathOffset:75},
-    {box:"250MM", legs:["75MM"],                maxGuideHeight:null, lathOffset:100}
+    {box:"250MM", legs:["75MM"],                maxGuideHeight:null, lathOffset:100, extraLath:1}
   ],
   77: [
-    {box:"250MM", legs:["75MM","90MM"],         maxGuideHeight:1900, lathOffset:100},
+    {box:"250MM", legs:["75MM","90MM"],         maxGuideHeight:2040, lathOffset:100, extraLath:1},
     {box:"300MM", legs:["75MM","90MM","110MM"], maxGuideHeight:3000, lathOffset:100}
   ]
 };
@@ -768,29 +768,46 @@ function getBoxLegCombo(profileKey, boxValue){
 // in DOOR_SHEET_COST_77. Quantities are derived from the same cutting-size
 // formulas used above; rates (£) are the supplier costs currently entered
 // in that workbook. Update the "rate" values here if supplier prices change.
+// Supplier rates from Look_Doors_Master_Price_List.xlsx (ex VAT)
+const BOX_RATES = { // top/base £/m, end cap £/pair (2 x single)
+  "205MM": {top:8.67,  base:6.54, capPair:18.44},
+  "250MM": {top:10.56, base:7.76, capPair:51.56},
+  "300MM": {top:11.97, base:9.08, capPair:66.08}
+};
+const GUIDE_RATES = {"75MM":11.20, "90MM":13.06, "110MM":18.99}; // 77mm guide £/m by leg
+// 55 lath: a full pack (24 x 6m lengths) is paid for per door. All 55 colours are £1.34/m in the price list.
+const LATH55_PACK_LENGTHS = 24, LATH55_LENGTH_M = 6.0;
+const LATH55_RATE_PER_M = {"default":1.34}; // add per-colour rates here if they ever differ
+const lath55PackCost = (v)=> LATH55_PACK_LENGTHS * LATH55_LENGTH_M * (LATH55_RATE_PER_M[v.curtainColour] ?? LATH55_RATE_PER_M.default);
+const LATH77_MIN_M = 2.33;    // 77 lath: fixed cost covers first 2.33m (door up to 2400 wide)
+const boxRate = (k)=>(v)=> (BOX_RATES[v.box]||BOX_RATES["250MM"])[k];
+
 const PRICE_PROFILES = {
   "55": {
     complete: true,
     items: [
-      {label:"Control Unit — Somfy RTS Wired",                  rate:140, qty:(v,p)=> v.controlType==="Somfy RTS Wired" ? 1 : 0},
-      {label:"Control Unit — Somfy Rollixo Premium IO Wired",    rate:165, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wired" ? 1 : 0},
-      {label:"Control Unit — Somfy Rollixo Premium IO Wireless", rate:165, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wireless" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo RTS Wired",                  rate:112, qty:(v,p)=> v.controlType==="Somfy Rollixo RTS Wired" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo Premium IO Wired",    rate:175, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wired" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo Premium IO Wireless", rate:175, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wireless" ? 1 : 0},
       {label:"Control Unit — ANSA",                 rate:140,   qty:(v,p)=> v.controlType==="ANSA" ? 1 : 0},
       {label:"Control Unit — ANSA Low Headroom",    rate:140,   qty:(v,p)=> v.controlType==="ANSA Low Headroom" ? 1 : 0},
       {label:"Control Unit — Eurodrive kit",        rate:40,    qty:(v,p)=> v.controlType==="Eurodrive kit" ? 1 : 0},
-      {label:"Tube Motor",               rate:42,   qty:(v,p)=> 1},
-      {label:"Octagonal Tube",           rate:6,    qty:(v,p)=> v.barrelLength/1000},
+      {label:"Tube Motor — Eurodrive 40nm (door up to 3m wide)", rate:38, qty:(v,p)=> v.overguide <= 3000 ? 1 : 0},
+      {label:"Tube Motor — Eurodrive 60nm (door over 3m wide)",  rate:40, qty:(v,p)=> (v.overguide > 3000 && v.overguide <= 4000) ? 1 : 0},
+      {label:"Tube Motor — Eurodrive 80nm (door over 4m wide)",  rate:52, qty:(v,p)=> v.overguide > 4000 ? 1 : 0},
+      {label:"Octagonal Tube", rate:4.68, qty:(v,p)=> v.overguide > 3500 ? 0 : v.barrelLength/1000},
+      {label:"Heavy Duty Tube SW7015 70x1.5 (door over 3.5m wide)", rate:5.95, qty:(v,p)=> v.overguide > 3500 ? v.barrelLength/1000 : 0},
       {label:"Adjustable Dummy End",     rate:5,    qty:(v,p)=> 1},
-      {label:"Lath",                     rate:1.5,  qty:(v,p)=> (v.guideHeight/p.lathDivisor) * (v.lathCut/1000)},
-      {label:"Bottom Rail",              rate:7,    qty:(v,p)=> v.lathCut/1000},
-      {label:"70mm Guide",               rate:11,   qty:(v,p)=> (v.guideHeight*2)/1000},
+      {label:"Lath (full pack, 24 x 6m)", rate:(v)=>lath55PackCost(v), qty:(v,p)=> 1},
+      {label:"Bottom Rail", rate:6.54, qty:(v,p)=> v.lathCut/1000},
+      {label:"70mm Guide", rate:8.64, qty:(v,p)=> (v.guideHeight*2)/1000},
       {label:"90mm Guide",               rate:0,    qty:(v,p)=> (v.guideHeight*2)/1000},
-      {label:"Top Box",                  rate:10,   qty:(v,p)=> v.hoodLength/1000},
-      {label:"Base Box",                 rate:10,   qty:(v,p)=> v.hoodLength/1000},
-      {label:"End Lock",                 rate:0.09, qty:(v,p)=> v.guideHeight/p.lathDivisor},
-      {label:"End Cap (Pair)",           rate:30,   qty:(v,p)=> 1},
+      {label:"Top Box", rate:boxRate("top"), qty:(v,p)=> v.hoodLength/1000},
+      {label:"Base Box", rate:boxRate("base"), qty:(v,p)=> v.hoodLength/1000},
+      {label:"End Lock", rate:0.74, qty:(v,p)=> v.lathAmount},
+      {label:"End Cap (Pair)", rate:boxRate("capPair"), qty:(v,p)=> 1},
       {label:"Security Ring",            rate:45,   qty:(v,p)=> v.overguide/550},
-      {label:"Security Strap",           rate:5,    qty:(v,p)=> 5},
+      {label:"Security Strap", rate:2.45, qty:(v,p)=> 5},
       {label:"Hand Crank",               rate:8.75, qty:(v,p)=> v.crankHandle ? 1 : 0},
       {label:"🌐 Key Switch",            rate:19.70,qty:(v,p)=> v.keySwitch ? 1 : 0},
       {label:"🌐 Lockbox",               rate:24,   qty:(v,p)=> v.lockbox ? 1 : 0},
@@ -804,25 +821,28 @@ const PRICE_PROFILES = {
   "77-70": {
     complete: true,
     items: [
-      {label:"Control Unit — Somfy RTS Wired",                  rate:140, qty:(v,p)=> v.controlType==="Somfy RTS Wired" ? 1 : 0},
-      {label:"Control Unit — Somfy Rollixo Premium IO Wired",    rate:165, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wired" ? 1 : 0},
-      {label:"Control Unit — Somfy Rollixo Premium IO Wireless", rate:165, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wireless" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo RTS Wired",                  rate:112, qty:(v,p)=> v.controlType==="Somfy Rollixo RTS Wired" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo Premium IO Wired",    rate:175, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wired" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo Premium IO Wireless", rate:175, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wireless" ? 1 : 0},
       {label:"Control Unit — ANSA",                 rate:140,   qty:(v,p)=> v.controlType==="ANSA" ? 1 : 0},
       {label:"Control Unit — ANSA Low Headroom",    rate:140,   qty:(v,p)=> v.controlType==="ANSA Low Headroom" ? 1 : 0},
       {label:"Control Unit — Eurodrive kit",        rate:40,    qty:(v,p)=> v.controlType==="Eurodrive kit" ? 1 : 0},
-      {label:"Tube Motor",               rate:42,   qty:(v,p)=> 1},
-      {label:"Octagonal Tube",           rate:7,    qty:(v,p)=> v.barrelLength/1000},
-      {label:"Adjustable Dummy End",     rate:5.5,  qty:(v,p)=> 1},
-      {label:"Lath",                     rate:2.5,  qty:(v,p)=> (v.guideHeight/p.lathDivisor) * (v.lathCut/1000)},
-      {label:"Bottom Rail",              rate:8,    qty:(v,p)=> v.lathCut/1000},
+      {label:"Tube Motor — Eurodrive 40nm (door up to 3m wide)", rate:38, qty:(v,p)=> v.overguide <= 3000 ? 1 : 0},
+      {label:"Tube Motor — Eurodrive 60nm (door over 3m wide)",  rate:40, qty:(v,p)=> (v.overguide > 3000 && v.overguide <= 4000) ? 1 : 0},
+      {label:"Tube Motor — Eurodrive 80nm (door over 4m wide)",  rate:52, qty:(v,p)=> v.overguide > 4000 ? 1 : 0},
+      {label:"Octagonal Tube", rate:7.95, qty:(v,p)=> v.overguide > 3500 ? 0 : v.barrelLength/1000},
+      {label:"Heavy Duty Tube SW7015 70x1.5 (door over 3.5m wide)", rate:5.95, qty:(v,p)=> v.overguide > 3500 ? v.barrelLength/1000 : 0},
+      {label:"Adjustable Dummy End",     rate:7.50,  qty:(v,p)=> 1},
+      {label:"Lath (min 2.33m width)", rate:2.36, qty:(v,p)=> v.lathAmount * Math.max(v.lathCut/1000, LATH77_MIN_M)},
+      {label:"Bottom Rail", rate:7.61, qty:(v,p)=> v.lathCut/1000},
       {label:"70mm Guide",               rate:0,    qty:(v,p)=> (v.guideHeight*2)/1000},
-      {label:"90mm Guide",               rate:14,   qty:(v,p)=> (v.guideHeight*2)/1000},
-      {label:"Top Box",                  rate:13,   qty:(v,p)=> v.hoodLength/1000},
-      {label:"Base Box",                 rate:13,   qty:(v,p)=> v.hoodLength/1000},
-      {label:"End Lock",                 rate:0.09, qty:(v,p)=> v.guideHeight/p.lathDivisor},
-      {label:"End Cap (Pair)",           rate:38,   qty:(v,p)=> 1},
+      {label:"Guide (selected leg)", rate:(v)=>GUIDE_RATES[v.leg]||GUIDE_RATES["90MM"], qty:(v,p)=> (v.guideHeight*2)/1000},
+      {label:"Top Box", rate:boxRate("top"), qty:(v,p)=> v.hoodLength/1000},
+      {label:"Base Box", rate:boxRate("base"), qty:(v,p)=> v.hoodLength/1000},
+      {label:"End Lock", rate:0.11, qty:(v,p)=> v.lathAmount},
+      {label:"End Cap (Pair)", rate:boxRate("capPair"), qty:(v,p)=> 1},
       {label:"Security Ring",            rate:45,   qty:(v,p)=> v.overguide/520},
-      {label:"Security Strap",           rate:6.5,  qty:(v,p)=> 5},
+      {label:"Security Strap", rate:3.76, qty:(v,p)=> 5},
       {label:"Hand Crank",               rate:8.75, qty:(v,p)=> v.crankHandle ? 1 : 0},
       {label:"🌐 Key Switch",            rate:19.70,qty:(v,p)=> v.keySwitch ? 1 : 0},
       {label:"🌐 Lockbox",               rate:24,   qty:(v,p)=> v.lockbox ? 1 : 0},
@@ -830,22 +850,24 @@ const PRICE_PROFILES = {
       {label:"Bearing (Plastic Insert)", rate:0,    qty:(v,p)=> 1},
       {label:"Roller Override",          rate:83,   qty:(v,p)=> v.emrOverride ? 1 : 0},
       {label:"Guide Roller (GR70)",      rate:4.5,  qty:(v,p)=> 1},
-      {label:"13mm Safety Brake",        rate:28,   qty:(v,p)=> 1}
+      {label:"18mm Safety Brake",        rate:28.25,   qty:(v,p)=> 1}
     ]
   },
   "77-89": {
     complete: false, // several supplier prices missing/invalid in the source sheet — shown as TBC
     items: [
-      {label:"Control Unit — Somfy RTS Wired",                  rate:140, qty:(v,p)=> v.controlType==="Somfy RTS Wired" ? 1 : 0},
-      {label:"Control Unit — Somfy Rollixo Premium IO Wired",    rate:165, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wired" ? 1 : 0},
-      {label:"Control Unit — Somfy Rollixo Premium IO Wireless", rate:165, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wireless" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo RTS Wired",                  rate:112, qty:(v,p)=> v.controlType==="Somfy Rollixo RTS Wired" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo Premium IO Wired",    rate:175, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wired" ? 1 : 0},
+      {label:"Control Unit — Somfy Rollixo Premium IO Wireless", rate:175, qty:(v,p)=> v.controlType==="Somfy Rollixo Premium IO Wireless" ? 1 : 0},
       {label:"Control Unit — ANSA",                 rate:140,   qty:(v,p)=> v.controlType==="ANSA" ? 1 : 0},
       {label:"Control Unit — ANSA Low Headroom",    rate:140,   qty:(v,p)=> v.controlType==="ANSA Low Headroom" ? 1 : 0},
       {label:"Control Unit — Eurodrive kit",        rate:40,    qty:(v,p)=> v.controlType==="Eurodrive kit" ? 1 : 0},
-      {label:"Tube Motor",                  rate:42,  qty:(v,p)=> 1},
+      {label:"Tube Motor — Eurodrive 40nm (door up to 3m wide)", rate:38, qty:(v,p)=> v.overguide <= 3000 ? 1 : 0},
+      {label:"Tube Motor — Eurodrive 60nm (door over 3m wide)",  rate:40, qty:(v,p)=> (v.overguide > 3000 && v.overguide <= 4000) ? 1 : 0},
+      {label:"Tube Motor — Eurodrive 80nm (door over 4m wide)",  rate:52, qty:(v,p)=> v.overguide > 4000 ? 1 : 0},
       {label:"89mm Tube",                   rate:0,   qty:(v,p)=> v.barrelLength/1000, missing:true},
       {label:"Adjustable Dummy End",        rate:0,   qty:(v,p)=> 1, missing:true},
-      {label:"Lath",                        rate:1.67,qty:(v,p)=> (v.guideHeight/p.lathDivisor) * (v.lathCut/1000)},
+      {label:"Lath (min 2.33m width)", rate:2.36, qty:(v,p)=> v.lathAmount * Math.max(v.lathCut/1000, LATH77_MIN_M)},
       {label:"Bottom Rail",                 rate:0,   qty:(v,p)=> v.lathCut/1000, missing:true, note:"price cell contained invalid text in source sheet"},
       {label:"70mm Guide",                  rate:0,   qty:(v,p)=> (v.guideHeight*2)/1000, missing:true},
       {label:"90mm Guide",                  rate:0,   qty:(v,p)=> (v.guideHeight*2)/1000, missing:true},
@@ -888,6 +910,22 @@ const DEFAULT_COLOURS = {
   fillSelect(sel, COLOURS);
   sel.value = DEFAULT_COLOURS[id];
 });
+
+// 55mm doors are only offered in four colours; 77mm doors get the full range.
+// Applies to curtain, guide and box. If the current choice isn't allowed for
+// the profile it falls back to White.
+const COLOURS_55 = ["BLACK (RAL 9005)","WHITE (RAL 9016)","BROWN (RAL 8014)","ANTHRACITE GREY (RAL 7016)"];
+function updateColourOptions(){
+  const profileKey = document.getElementById("profile").value;
+  const p = PROFILES[profileKey];
+  const list = (p && p.lathDivisor === 55) ? COLOURS_55 : COLOURS;
+  ["curtainColour","guideColour","boxColour"].forEach(id=>{
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    fillSelect(sel, list);
+    sel.value = list.includes(prev) ? prev : DEFAULT_COLOURS[id];
+  });
+}
 
 function roundUpWhole(n){ return Math.ceil(n); }
 
@@ -960,7 +998,10 @@ function updateBoxAndGuideOptions(){
     endPlatesSel.value = firstEnabledBox;
   }
   endPlatesSel.disabled = enabledBoxCount <= 1;
-  endPlatesField.classList.toggle("warn-active", anyBoxTooTall);
+  // Only warn if the box actually selected is unsuitable (or none fits) —
+  // not merely because a smaller box is greyed out as too small.
+  const chosenBoxOpt = Array.from(endPlatesSel.options).find(o => o.value === endPlatesSel.value);
+  endPlatesField.classList.toggle("warn-active", anyBoxTooTall && (enabledBoxCount === 0 || !chosenBoxOpt || chosenBoxOpt.disabled));
 
   // ---- Guide Width (leg) ----
   const selectedCombo = combos.find(c => c.box === endPlatesSel.value) || null;
@@ -1038,7 +1079,7 @@ function recalc(){
   const driveThru70 = overguide - 140;
   const driveThru90 = overguide - 180;
   const lathCut = overguide - lathOffset;
-  const lathAmount = 1 + Math.round(guideHeight / p.lathDivisor);
+  const lathAmount = 1 + Math.round(guideHeight / p.lathDivisor) + (combo && combo.extraLath ? combo.extraLath : 0);
   const guideLength = guideHeight;
   const hoodLength = overguide - 10;
   const barrelLength = overguide - p.barrelOffset;
@@ -1070,13 +1111,14 @@ function recalc(){
 
   computePrice(
     {
-      overguide, guideHeight, lathCut, hoodLength, barrelLength,
+      overguide, guideHeight, lathCut, lathAmount, hoodLength, barrelLength, box: boxValue, leg: (document.getElementById("guideWidth")||{}).value,
       crankHandle: document.getElementById("crankHandle").checked,
       emrOverride: document.getElementById("emrOverride").checked,
       keySwitch: document.getElementById("keySwitch").checked,
       lockbox: document.getElementById("lockbox").checked,
       remotesQty: parseFloat(document.getElementById("remotesQty").value) || 0,
-      controlType: document.getElementById("controlType").value
+      controlType: document.getElementById("controlType").value,
+      curtainColour: document.getElementById("curtainColour").value
     },
     document.getElementById("profile").value,
     p
@@ -1134,14 +1176,15 @@ function computePrice(v, profileKey, p){
 
   profile.items.forEach(item=>{
     const itemQty = item.qty(v, p);
-    const lineCost = itemQty * item.rate;
+    const itemRate = typeof item.rate === "function" ? item.rate(v, p) : item.rate;
+    const lineCost = itemQty * itemRate;
     total += lineCost;
     if(item.missing && itemQty > 0) selectionIncomplete = true;
     if(costingBody){
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${item.label}${item.missing ? " ⚠️" : ""}</td>`
         + `<td class="num">${itemQty.toFixed(2)}</td>`
-        + `<td class="num">${item.missing ? "TBC" : fmtMoney(item.rate)}</td>`
+        + `<td class="num">${item.missing ? "TBC" : fmtMoney(itemRate)}</td>`
         + `<td class="num">${item.missing ? "TBC" : fmtMoney(lineCost)}</td>`;
       costingBody.appendChild(tr);
     }
@@ -2060,6 +2103,7 @@ function updateDoorPreview(){
 }
 
 function fullRefresh(){
+  updateColourOptions();
   updateEndPlatesOptions();
   updateGuideWidthOptions();
   updateControlTypeOptions();
