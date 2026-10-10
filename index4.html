@@ -733,7 +733,7 @@ const COLOURS = [
 const CONTROL_TYPES = ["Somfy Rollixo RTS Wired","Somfy Rollixo Premium IO Wired","Somfy Rollixo Premium IO Wireless","ANSA","ANSA Low Headroom","Eurodrive kit"];
 
 const PROFILES = {
-  "55":    {label:"55mm (Octagonal Barrel)", barrelOffset:85,  lathDivisor:55, liftDivisor:450, barrelRings:"x2"},
+  "55":    {label:"55mm (Octagonal Barrel)", barrelOffset:85,  lathDivisor:55, liftDivisor:450, liftEdge:150, liftSpacing:600, barrelRings:"x2"},
   "77-89": {label:"77mm (89mm Depart Barrel)", barrelOffset:120, lathDivisor:77, liftDivisor:450, barrelRings:"equal"},
   "77-70": {label:"77mm (70mm Oct Barrel)",   barrelOffset:120, lathDivisor:77, liftDivisor:600, barrelRings:"fixed2"}
 };
@@ -771,16 +771,40 @@ function getBoxLegCombo(profileKey, boxValue){
 // Supplier rates from Look_Doors_Master_Price_List.xlsx (ex VAT)
 const BOX_RATES = { // top/base £/m, end cap £/pair (2 x single)
   "205MM": {top:8.67,  base:6.54, capPair:18.44},
-  "250MM": {top:10.56, base:7.76, capPair:51.56},
-  "300MM": {top:11.97, base:9.08, capPair:66.08}
+  "250MM": {top:11.97, base:9.08, capPair:40.00},
+  "300MM": {top:11.97, base:9.08, capPair:40.00}
 };
 const GUIDE_RATES = {"75MM":11.20, "90MM":13.06, "110MM":18.99}; // 77mm guide £/m by leg
 // 55 lath: a full pack (24 x 6m lengths) is paid for per door. All 55 colours are £1.34/m in the price list.
 const LATH55_PACK_LENGTHS = 24, LATH55_LENGTH_M = 6.0;
-const LATH55_RATE_PER_M = {"default":1.34}; // add per-colour rates here if they ever differ
+const LATH55_RATE_PER_M = {"default":1.34, "GOLDEN OAK (WOODGRAIN)":1.46}; // PA55/130 golden oak (inv. 26/08/2026) // add per-colour rates here if they ever differ
 const lath55PackCost = (v)=> LATH55_PACK_LENGTHS * LATH55_LENGTH_M * (LATH55_RATE_PER_M[v.curtainColour] ?? LATH55_RATE_PER_M.default);
 const LATH77_MIN_M = 2.33;    // 77 lath: fixed cost covers first 2.33m (door up to 2400 wide)
-const boxRate = (k)=>(v)=> (BOX_RATES[v.box]||BOX_RATES["250MM"])[k];
+// Colour-specific rates, taken from supplier invoices (what is invoiced is what is paid).
+// Any colour not listed here uses the standard rate above.
+const GOLDEN_OAK = "GOLDEN OAK (WOODGRAIN)", ROSEWOOD = "ROSEWOOD (WOODGRAIN)";
+const WOODGRAINS = [GOLDEN_OAK, ROSEWOOD, "WALNUT (WOODGRAIN)"];
+// All woodgrain colours, on every box size, are charged the same box price: top (lid) £14.35/m, base (box) £18.32/m
+// (set by the business; swapped vs the supplier list codes SK/G/300/27 and SK45/D/300/27).
+// End caps: only the 205 has an invoice price (BS_45/205/30, inv. 26/08/2026); 250/300 use the standard end cap rate.
+const WOODGRAIN_TOP = 14.35, WOODGRAIN_BASE = 18.32;
+const WOODGRAIN_BOX_RATES = {
+  "205MM": {top:WOODGRAIN_TOP, base:WOODGRAIN_BASE, capPair:18.59},
+  "250MM": {top:WOODGRAIN_TOP, base:WOODGRAIN_BASE},
+  "300MM": {top:WOODGRAIN_TOP, base:WOODGRAIN_BASE}
+};
+const BOX_COLOUR_RATES = {}; // box size -> colour -> overrides for top/base £/m and end cap £/pair
+Object.keys(WOODGRAIN_BOX_RATES).forEach(box=>{
+  BOX_COLOUR_RATES[box] = {};
+  WOODGRAINS.forEach(c=>{ BOX_COLOUR_RATES[box][c] = WOODGRAIN_BOX_RATES[box]; });
+});
+const LATH77_COLOUR_RATES = { [ROSEWOOD]: 4.30 };        // PA77/127/R rosewood (inv. 16/06/2026); standard 77 lath £2.36
+const BOTTOM_RAIL77_COLOUR_RATES = { [ROSEWOOD]: 9.88 }; // LDG/D rosewood (inv. 16/06/2026); standard £7.61
+const boxRate = (k)=>(v)=>{
+  const std = BOX_RATES[v.box] || BOX_RATES["250MM"];
+  const col = (BOX_COLOUR_RATES[v.box] || {})[v.boxColour];
+  return (col && col[k] != null) ? col[k] : std[k];
+};
 
 const PRICE_PROFILES = {
   "55": {
@@ -795,12 +819,12 @@ const PRICE_PROFILES = {
       {label:"Tube Motor — Eurodrive 40nm (door up to 3m wide)", rate:38, qty:(v,p)=> v.overguide <= 3000 ? 1 : 0},
       {label:"Tube Motor — Eurodrive 60nm (door over 3m wide)",  rate:40, qty:(v,p)=> (v.overguide > 3000 && v.overguide <= 4000) ? 1 : 0},
       {label:"Tube Motor — Eurodrive 80nm (door over 4m wide)",  rate:52, qty:(v,p)=> v.overguide > 4000 ? 1 : 0},
-      {label:"Octagonal Tube", rate:4.68, qty:(v,p)=> v.overguide > 3500 ? 0 : v.barrelLength/1000},
-      {label:"Heavy Duty Tube SW7015 70x1.5 (door over 3.5m wide)", rate:5.95, qty:(v,p)=> v.overguide > 3500 ? v.barrelLength/1000 : 0},
+      {label:"Octagonal Tube", rate:4.90, qty:(v,p)=> v.overguide > 3500 ? 0 : v.barrelLength/1000},
+      {label:"Heavy Duty Tube SW7015 70x1.5 (door over 3.5m wide)", rate:6.25, qty:(v,p)=> v.overguide > 3500 ? v.barrelLength/1000 : 0},
       {label:"Adjustable Dummy End",     rate:5,    qty:(v,p)=> 1},
       {label:"Lath (full pack, 24 x 6m)", rate:(v)=>lath55PackCost(v), qty:(v,p)=> 1},
-      {label:"Bottom Rail", rate:6.54, qty:(v,p)=> v.lathCut/1000},
-      {label:"70mm Guide", rate:8.64, qty:(v,p)=> (v.guideHeight*2)/1000},
+      {label:"Bottom Rail", rate:6.87, qty:(v,p)=> v.lathCut/1000},
+      {label:"70mm Guide", rate:9.07, qty:(v,p)=> (v.guideHeight*2)/1000},
       {label:"90mm Guide",               rate:0,    qty:(v,p)=> (v.guideHeight*2)/1000},
       {label:"Top Box", rate:boxRate("top"), qty:(v,p)=> v.hoodLength/1000},
       {label:"Base Box", rate:boxRate("base"), qty:(v,p)=> v.hoodLength/1000},
@@ -831,10 +855,10 @@ const PRICE_PROFILES = {
       {label:"Tube Motor — Eurodrive 60nm (door over 3m wide)",  rate:40, qty:(v,p)=> (v.overguide > 3000 && v.overguide <= 4000) ? 1 : 0},
       {label:"Tube Motor — Eurodrive 80nm (door over 4m wide)",  rate:52, qty:(v,p)=> v.overguide > 4000 ? 1 : 0},
       {label:"Octagonal Tube", rate:7.95, qty:(v,p)=> v.overguide > 3500 ? 0 : v.barrelLength/1000},
-      {label:"Heavy Duty Tube SW7015 70x1.5 (door over 3.5m wide)", rate:5.95, qty:(v,p)=> v.overguide > 3500 ? v.barrelLength/1000 : 0},
+      {label:"Heavy Duty Tube SW7015 70x1.5 (door over 3.5m wide)", rate:6.25, qty:(v,p)=> v.overguide > 3500 ? v.barrelLength/1000 : 0},
       {label:"Adjustable Dummy End",     rate:7.50,  qty:(v,p)=> 1},
-      {label:"Lath (min 2.33m width)", rate:2.36, qty:(v,p)=> v.lathAmount * Math.max(v.lathCut/1000, LATH77_MIN_M)},
-      {label:"Bottom Rail", rate:7.61, qty:(v,p)=> v.lathCut/1000},
+      {label:"Lath (min 2.33m width)", rate:(v)=>LATH77_COLOUR_RATES[v.curtainColour] ?? 2.36, qty:(v,p)=> v.lathAmount * Math.max(v.lathCut/1000, LATH77_MIN_M)},
+      {label:"Bottom Rail", rate:(v)=>BOTTOM_RAIL77_COLOUR_RATES[v.curtainColour] ?? 7.61, qty:(v,p)=> v.lathCut/1000},
       {label:"70mm Guide",               rate:0,    qty:(v,p)=> (v.guideHeight*2)/1000},
       {label:"Guide (selected leg)", rate:(v)=>GUIDE_RATES[v.leg]||GUIDE_RATES["90MM"], qty:(v,p)=> (v.guideHeight*2)/1000},
       {label:"Top Box", rate:boxRate("top"), qty:(v,p)=> v.hoodLength/1000},
@@ -867,7 +891,7 @@ const PRICE_PROFILES = {
       {label:"Tube Motor — Eurodrive 80nm (door over 4m wide)",  rate:52, qty:(v,p)=> v.overguide > 4000 ? 1 : 0},
       {label:"89mm Tube",                   rate:0,   qty:(v,p)=> v.barrelLength/1000, missing:true},
       {label:"Adjustable Dummy End",        rate:0,   qty:(v,p)=> 1, missing:true},
-      {label:"Lath (min 2.33m width)", rate:2.36, qty:(v,p)=> v.lathAmount * Math.max(v.lathCut/1000, LATH77_MIN_M)},
+      {label:"Lath (min 2.33m width)", rate:(v)=>LATH77_COLOUR_RATES[v.curtainColour] ?? 2.36, qty:(v,p)=> v.lathAmount * Math.max(v.lathCut/1000, LATH77_MIN_M)},
       {label:"Bottom Rail",                 rate:0,   qty:(v,p)=> v.lathCut/1000, missing:true, note:"price cell contained invalid text in source sheet"},
       {label:"70mm Guide",                  rate:0,   qty:(v,p)=> (v.guideHeight*2)/1000, missing:true},
       {label:"90mm Guide",                  rate:0,   qty:(v,p)=> (v.guideHeight*2)/1000, missing:true},
@@ -1085,7 +1109,10 @@ function recalc(){
   const barrelLength = overguide - p.barrelOffset;
   const bottomRail = lathCut;
   const endLocks = lathAmount;
-  const liftingStraps = roundUpWhole(lathCut / p.liftDivisor);
+  // 55mm (compact): straps start liftEdge in from each side, then ~liftSpacing apart (closest even spacing)
+  const liftingStraps = p.liftSpacing
+    ? Math.max(2, Math.round(Math.max(0, lathCut - 2*p.liftEdge) / p.liftSpacing) + 1)
+    : roundUpWhole(lathCut / p.liftDivisor);
   let barrelRings;
   if(p.barrelRings==="x2") barrelRings = liftingStraps*2;
   else if(p.barrelRings==="equal") barrelRings = liftingStraps;
@@ -1118,7 +1145,8 @@ function recalc(){
       lockbox: document.getElementById("lockbox").checked,
       remotesQty: parseFloat(document.getElementById("remotesQty").value) || 0,
       controlType: document.getElementById("controlType").value,
-      curtainColour: document.getElementById("curtainColour").value
+      curtainColour: document.getElementById("curtainColour").value,
+      boxColour: document.getElementById("boxColour").value
     },
     document.getElementById("profile").value,
     p
